@@ -10,7 +10,8 @@ Hooks.once("socketlib.ready", () => {
 });
 
 Hooks.on("createChatMessage", async (msg) => {
-    if (msg.content !== "rps" || game.user.id !== msg.user.id) return;
+    const messageContent = msg.content.replace(/<[^>]*>/g, "").trim();
+    if (messageContent !== "rps" || game.user.id !== msg.author.id) return;
     let gmOnline = false;
     await game.users.forEach(user => {
         if (user.active && user.isGM) {
@@ -19,16 +20,16 @@ Hooks.on("createChatMessage", async (msg) => {
         }
     })
     if (gmOnline) {
-        await socket.executeAsUser("startRPS", msg.user.id, msg);
+        await socket.executeAsUser("startRPS", msg.author.id, msg);
         await socket.executeAsGM("deleteMessageRPS", msg.id);
     }
     else {
-        ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: "Rock, Paper, Scissors! only works when a GM is online.", whisper: [msg.user.id] });
+        ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: "Rock, Paper, Scissors! only works when a GM is online.", whisper: [msg.author.id] });
     }
 });
 
-Hooks.on('renderChatMessage', async (msg, [html], messageData) => {
-    if (msg.content.includes('<select id="rpsSelectUser">') && game.user.id === msg.user.id) {
+Hooks.on('renderChatMessageHTML', async (msg, html, messageData) => {
+    if (msg.content.includes('<select id="rpsSelectUser">') && game.user.id === msg.author.id) {
         const selectElement = html.querySelector('#rpsSelectUser');
         const startButton = html.querySelector('.rpsStartButton');
 
@@ -50,7 +51,7 @@ Hooks.on('renderChatMessage', async (msg, [html], messageData) => {
     }
 });
 
-Hooks.on('renderChatMessage', async (msg, [html], messageData) => {
+Hooks.on('renderChatMessageHTML', async (msg, html, messageData) => {
     if (!msg.flags.rockpaperscissors) return;
     addSelectionListeners(msg.id, html);
 });
@@ -112,21 +113,21 @@ function addSelectionListeners(messageid, html) {
             const message = game.messages.get(messageid);
             const linkedMessage = game.messages.get(message.flags.rockpaperscissors.linkedMessage);
             if (!linkedMessage.flags.rockpaperscissors.ready) {
-                socket.executeAsGM("updateMessageRPS", message.id, { content: "You chose <strong>" + selectedChoice + "</strong>! Waiting for " + linkedMessage.user.name + " to make their choice...", flags: { rockpaperscissors: { ready: true, choice: selectedChoice } } });
+                socket.executeAsGM("updateMessageRPS", message.id, { content: "You chose <strong>" + selectedChoice + "</strong>! Waiting for " + linkedMessage.author.name + " to make their choice...", flags: { rockpaperscissors: { ready: true, choice: selectedChoice } } });
             }
             else {
                 const linkedMessageChoice = linkedMessage.flags.rockpaperscissors.choice;
                 const messageChoice = selectedChoice
-                const cardTitle = message.user.name + " and " + linkedMessage.user.name + " played Rock, Paper, Scissors!";
-                let result = message.user.name + " played <strong>" + messageChoice + "</strong>!<br><br>" + linkedMessage.user.name + " played <strong>" + linkedMessageChoice + "</strong>!<br><hr />";
+                const cardTitle = message.author.name + " and " + linkedMessage.author.name + " played Rock, Paper, Scissors!";
+                let result = message.author.name + " played <strong>" + messageChoice + "</strong>!<br><br>" + linkedMessage.author.name + " played <strong>" + linkedMessageChoice + "</strong>!<br><hr />";
                 if (messageChoice === linkedMessageChoice) {
                     result += "<strong>It's a tie!</strong>";
                 }
                 else if ((messageChoice === "scissors" && linkedMessageChoice === "paper") || (messageChoice === "paper" && linkedMessageChoice === "rock") || (messageChoice === "rock" && linkedMessageChoice === "scissors")) {
-                    result += "<strong>" + message.user.name + " won! </strong>";
+                    result += "<strong>" + message.author.name + " won! </strong>";
                 }
                 else {
-                    result += "<strong>" + linkedMessage.user.name + " won! </strong>";
+                    result += "<strong>" + linkedMessage.author.name + " won! </strong>";
                 }
                 ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: `<div style="text-align: center;" class="chat-card"><header class="card-header flexrow"><h3>` + cardTitle + `</h3></header><section class="card-content">` + result + `</section></div>` })
                 socket.executeAsGM("deleteMessageRPS", message.id);
@@ -143,9 +144,9 @@ function deleteMessageRPS(messageid) {
 }
 
 function startRPS(message) {
-    const activeUsers = game.users.filter(user => user.active && user.id !== message.user.id);
+    const activeUsers = game.users.filter(user => user.active && user.id !== message.author.id);
     if (activeUsers.length === 0) {
-        ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: "No other active users found.", whisper: [message.user.id] });
+        ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: "No other active users found.", whisper: [message.author.id] });
         return;
     }
     const dropdownOptions = activeUsers.map(user => ({
@@ -167,13 +168,14 @@ function startRPS(message) {
         <div>${startButtonHtml}</div>
     </div>
     `;
-    ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: contentHtml, whisper: [message.user.id] });
+    ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: contentHtml, whisper: [message.author.id] });
 }
 
 async function otherUserRPS(userid, message) {
-    const initiatorsName = game.users.get(message.user).name;
+    const authorId = typeof message.author === "string" ? message.author : message.author.id;
+    const initiatorsName = game.users.get(authorId).name;
     Hooks.once("createChatMessage", (msg) => {
-        socket.executeAsGM("updateMessageRPS", message._id, { content: "You're playing Rock, Paper, Scissors with <strong>" + msg.user.name + "</strong>!\nMake your choice and click \"<strong>Shoot!</strong>\"\n" + game.messages.get(message._id).content, flags: { rockpaperscissors: { linkedMessage: msg.id, ready: false } } });
+        socket.executeAsGM("updateMessageRPS", message._id, { content: "You're playing Rock, Paper, Scissors with <strong>" + msg.author.name + "</strong>!\nMake your choice and click \"<strong>Shoot!</strong>\"\n" + game.messages.get(message._id).content, flags: { rockpaperscissors: { linkedMessage: msg.id, ready: false } } });
     });
     await ChatMessage.create({ speaker: { alias: "Rock, Paper, Scissors!" }, content: "<strong>" + initiatorsName + "</strong> wants to play Rock, Paper, Scissors with you!\nMake your choice and click \"<strong>Shoot!</strong>\"\n" + generateRPSButtons(250), whisper: [userid], flags: { rockpaperscissors: { linkedMessage: message._id, ready: false } } });
 }

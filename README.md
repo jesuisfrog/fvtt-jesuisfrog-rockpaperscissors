@@ -1,7 +1,8 @@
-[![Buy Me a Coffee](https://az743702.vo.msecnd.net/cdn/kofi3.png?v=0)](https://ko-fi.com/loki123)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/B0B15MGC4)
 
 # Rock, Paper, Scissors!
-A simple FoundryVTT module that allows two people to play Rock, Paper, Scissors! Need I say more?
+A simple FoundryVTT module that allows two people to play Rock, Paper, Scissors!
+Now updated to work in v13 and v14!
 
 Requires socketlib and a GM to be online in the world.
 
